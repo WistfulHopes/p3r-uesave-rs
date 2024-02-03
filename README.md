@@ -6,7 +6,8 @@
 A library for reading and writing Unreal Engine save files (commonly referred to
 as GVAS).
 
-This version is designed for use with Persona 3 Reload's modified save format.
+This version is designed for use with Persona 3 Reload's modified save format. Use in tandem with [P3R-Save-EnDecryptor
+](https://github.com/illusion0001/P3R-Save-EnDecryptor) for Steam.
 
 There is a small binary utility to quickly convert saves to and from a plain
 text JSON format which can be used for manual save editing.
