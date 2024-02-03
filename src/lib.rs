@@ -174,7 +174,7 @@ fn write_property<W: Write>(prop: &(String, Property), writer: &mut Context<W>) 
     let mut buf = vec![];
     let size = writer.stream(&mut buf, |writer| prop.1.write(writer))?;
 
-    writer.write_u64::<LE>(size as u64)?;
+    writer.write_u32::<LE>(size as u32)?;
     writer.write_all(&buf[..])?;
     Ok(())
 }
