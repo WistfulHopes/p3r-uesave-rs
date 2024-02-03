@@ -133,12 +133,12 @@ fn write_string_always_trailing<W: Write>(writer: &mut Context<W>, string: &str)
     Ok(())
 }
 
-type Properties = indexmap::IndexMap<String, Property>;
+type Properties = Vec<(String, Property)>;
 
 fn read_properties_until_none<R: Read + Seek>(reader: &mut Context<R>) -> TResult<Properties> {
     let mut properties = Properties::new();
     while let Some((name, prop)) = read_property(reader)? {
-        properties.insert(name, prop);
+        properties.push((name, prop));
     }
     Ok(properties)
 }
@@ -160,14 +160,15 @@ fn read_property<R: Read + Seek>(reader: &mut Context<R>) -> TResult<Option<(Str
     } else {
         reader.scope(&name, |reader| {
             let t = PropertyType::read(reader)?;
-            let size = reader.read_u64::<LE>()?;
-            let value = Property::read(reader, t, size)?;
+            let size = reader.read_u32::<LE>()?;
+            let index = reader.read_u32::<LE>()?;
+            let value = Property::read(reader, t, index, size)?;
             Ok(Some((name.clone(), value)))
         })
     }
 }
-fn write_property<W: Write>(prop: (&String, &Property), writer: &mut Context<W>) -> TResult<()> {
-    write_string(writer, prop.0)?;
+fn write_property<W: Write>(prop: &(String, Property), writer: &mut Context<W>) -> TResult<()> {
+    write_string(writer, &prop.0)?;
     prop.1.get_type().write(writer)?;
 
     let mut buf = vec![];
@@ -1475,7 +1476,7 @@ impl ValueVec {
     fn read<R: Read + Seek>(
         reader: &mut Context<R>,
         t: &PropertyType,
-        size: u64,
+        size: u32,
         count: u32,
     ) -> TResult<ValueVec> {
         Ok(match t {
@@ -1652,7 +1653,7 @@ impl ValueArray {
     fn read<R: Read + Seek>(
         reader: &mut Context<R>,
         t: &PropertyType,
-        size: u64,
+        size: u32,
     ) -> TResult<ValueArray> {
         let count = reader.read_u32::<LE>()?;
         Ok(match t {
@@ -1712,7 +1713,7 @@ impl ValueSet {
         reader: &mut Context<R>,
         t: &PropertyType,
         st: Option<&StructType>,
-        size: u64,
+        size: u32,
     ) -> TResult<ValueSet> {
         let count = reader.read_u32::<LE>()?;
         Ok(match t {
@@ -1742,130 +1743,155 @@ impl ValueSet {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum Property {
     Int8 {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: Int8,
     },
     Int16 {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: Int16,
     },
     Int {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: Int,
     },
     Int64 {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: Int64,
     },
     UInt8 {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: UInt8,
     },
     UInt16 {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: UInt16,
     },
     UInt32 {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: UInt32,
     },
     UInt64 {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: UInt64,
     },
     Float {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: Float,
     },
     Double {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: Double,
     },
     Bool {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: Bool,
     },
     Byte {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: Byte,
         enum_type: String,
     },
     Enum {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: Enum,
         enum_type: String,
     },
     Str {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: String,
     },
     FieldPath {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: FieldPath,
     },
     SoftObject {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: String,
         value2: String,
     },
     Name {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: String,
     },
     Object {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: String,
     },
     Text {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: Text,
     },
     Delegate {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: Delegate,
     },
     MulticastDelegate {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: MulticastDelegate,
     },
     MulticastInlineDelegate {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: MulticastInlineDelegate,
     },
     MulticastSparseDelegate {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: MulticastSparseDelegate,
     },
     Set {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         set_type: PropertyType,
         value: ValueSet,
     },
     Map {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         key_type: PropertyType,
@@ -1873,6 +1899,7 @@ pub enum Property {
         value: Vec<MapEntry>,
     },
     Struct {
+        index: UInt32,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
         value: StructValue,
@@ -1880,6 +1907,7 @@ pub enum Property {
         struct_id: uuid::Uuid,
     },
     Array {
+        index: UInt32,
         array_type: PropertyType,
         #[serde(skip_serializing_if = "Option::is_none")]
         id: Option<uuid::Uuid>,
@@ -1926,51 +1954,63 @@ impl Property {
     fn read<R: Read + Seek>(
         reader: &mut Context<R>,
         t: PropertyType,
-        size: u64,
+        index: u32,
+        size: u32,
     ) -> TResult<Property> {
         match t {
             PropertyType::Int8Property => Ok(Property::Int8 {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: reader.read_i8()?,
             }),
             PropertyType::Int16Property => Ok(Property::Int16 {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: reader.read_i16::<LE>()?,
             }),
             PropertyType::IntProperty => Ok(Property::Int {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: reader.read_i32::<LE>()?,
             }),
             PropertyType::Int64Property => Ok(Property::Int64 {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: reader.read_i64::<LE>()?,
             }),
             PropertyType::UInt8Property => Ok(Property::UInt8 {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: reader.read_u8()?,
             }),
             PropertyType::UInt16Property => Ok(Property::UInt16 {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: reader.read_u16::<LE>()?,
             }),
             PropertyType::UInt32Property => Ok(Property::UInt32 {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: reader.read_u32::<LE>()?,
             }),
             PropertyType::UInt64Property => Ok(Property::UInt64 {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: reader.read_u64::<LE>()?,
             }),
             PropertyType::FloatProperty => Ok(Property::Float {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: reader.read_f32::<LE>()?,
             }),
             PropertyType::DoubleProperty => Ok(Property::Double {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: reader.read_f64::<LE>()?,
             }),
             PropertyType::BoolProperty => Ok(Property::Bool {
                 value: reader.read_u8()? > 0,
+                index,
                 id: read_optional_uuid(reader)?,
             }),
             PropertyType::ByteProperty => Ok({
@@ -1983,57 +2023,69 @@ impl Property {
                 };
                 Property::Byte {
                     enum_type,
+                    index,
                     id,
                     value,
                 }
             }),
             PropertyType::EnumProperty => Ok(Property::Enum {
                 enum_type: read_string(reader)?,
+                index,
                 id: read_optional_uuid(reader)?,
                 value: read_string(reader)?,
             }),
             PropertyType::NameProperty => Ok(Property::Name {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: read_string(reader)?,
             }),
             PropertyType::StrProperty => Ok(Property::Str {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: read_string(reader)?,
             }),
             PropertyType::FieldPathProperty => Ok(Property::FieldPath {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: FieldPath::read(reader)?,
             }),
             PropertyType::SoftObjectProperty => Ok(Property::SoftObject {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: read_string(reader)?,
                 value2: read_string(reader)?,
             }),
             PropertyType::ObjectProperty => Ok(Property::Object {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: read_string(reader)?,
             }),
             PropertyType::TextProperty => Ok(Property::Text {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: Text::read(reader)?,
             }),
             PropertyType::DelegateProperty => Ok(Property::Delegate {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: Delegate::read(reader)?,
             }),
             PropertyType::MulticastDelegateProperty => Ok(Property::MulticastDelegate {
                 id: read_optional_uuid(reader)?,
+                index,
                 value: MulticastDelegate::read(reader)?,
             }),
             PropertyType::MulticastInlineDelegateProperty => {
                 Ok(Property::MulticastInlineDelegate {
                     id: read_optional_uuid(reader)?,
+                    index,
                     value: MulticastInlineDelegate::read(reader)?,
                 })
             }
             PropertyType::MulticastSparseDelegateProperty => {
                 Ok(Property::MulticastSparseDelegate {
                     id: read_optional_uuid(reader)?,
+                    index,
                     value: MulticastSparseDelegate::read(reader)?,
                 })
             }
@@ -2048,6 +2100,7 @@ impl Property {
                 let value = ValueSet::read(reader, &set_type, struct_type, size - 8)?;
                 Ok(Property::Set {
                     id,
+                    index,
                     set_type,
                     value,
                 })
@@ -2084,6 +2137,7 @@ impl Property {
                 }
 
                 Ok(Property::Map {
+                    index,
                     key_type,
                     value_type,
                     id,
@@ -2096,6 +2150,7 @@ impl Property {
                 let id = read_optional_uuid(reader)?;
                 let value = StructValue::read(reader, &struct_type)?;
                 Ok(Property::Struct {
+                    index,
                     struct_type,
                     struct_id,
                     id,
@@ -2108,6 +2163,7 @@ impl Property {
                 let value = ValueArray::read(reader, &array_type, size - 4)?;
 
                 Ok(Property::Array {
+                    index,
                     array_type,
                     id,
                     value,
@@ -2117,66 +2173,79 @@ impl Property {
     }
     fn write<W: Write>(&self, writer: &mut Context<W>) -> TResult<usize> {
         Ok(match self {
-            Property::Int8 { id, value } => {
+            Property::Int8 { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 writer.write_i8(*value)?;
                 1
             }
-            Property::Int16 { id, value } => {
+            Property::Int16 { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 writer.write_i16::<LE>(*value)?;
                 2
             }
-            Property::Int { id, value } => {
+            Property::Int { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 writer.write_i32::<LE>(*value)?;
                 4
             }
-            Property::Int64 { id, value } => {
+            Property::Int64 { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 writer.write_i64::<LE>(*value)?;
                 8
             }
-            Property::UInt8 { id, value } => {
+            Property::UInt8 { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 writer.write_u8(*value)?;
                 1
             }
-            Property::UInt16 { id, value } => {
+            Property::UInt16 { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 writer.write_u16::<LE>(*value)?;
                 2
             }
-            Property::UInt32 { id, value } => {
+            Property::UInt32 { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 writer.write_u32::<LE>(*value)?;
                 4
             }
-            Property::UInt64 { id, value } => {
+            Property::UInt64 { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 writer.write_u64::<LE>(*value)?;
                 8
             }
-            Property::Float { id, value } => {
+            Property::Float { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 writer.write_f32::<LE>(*value)?;
                 4
             }
-            Property::Double { id, value } => {
+            Property::Double { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 writer.write_f64::<LE>(*value)?;
                 8
             }
-            Property::Bool { id, value } => {
+            Property::Bool { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 writer.write_u8(u8::from(*value))?;
                 write_optional_uuid(writer, *id)?;
                 0
             }
             Property::Byte {
+                index,
                 enum_type,
                 id,
                 value,
             } => {
+                writer.write_u32::<LE>(*index)?;
                 write_string(writer, enum_type)?;
                 write_optional_uuid(writer, *id)?;
                 match value {
@@ -2191,16 +2260,19 @@ impl Property {
                 }
             }
             Property::Enum {
+                index,
                 enum_type,
                 id,
                 value,
             } => {
+                writer.write_u32::<LE>(*index)?;
                 write_string(writer, enum_type)?;
                 write_optional_uuid(writer, *id)?;
                 write_string(writer, value)?;
                 value.len() + 5
             }
-            Property::Name { id, value } => {
+            Property::Name { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 let mut buf = vec![];
                 writer.stream(&mut buf, |writer| write_string(writer, value))?;
@@ -2208,7 +2280,8 @@ impl Property {
                 writer.write_all(&buf)?;
                 size
             }
-            Property::Str { id, value } => {
+            Property::Str { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 let mut buf = vec![];
                 writer.stream(&mut buf, |writer| write_string(writer, value))?;
@@ -2216,7 +2289,8 @@ impl Property {
                 writer.write_all(&buf)?;
                 size
             }
-            Property::FieldPath { id, value } => {
+            Property::FieldPath { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 let mut buf = vec![];
                 writer.stream(&mut buf, |writer| value.write(writer))?;
@@ -2224,7 +2298,8 @@ impl Property {
                 writer.write_all(&buf)?;
                 size
             }
-            Property::SoftObject { id, value, value2 } => {
+            Property::SoftObject { index, id, value, value2 } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 let mut buf = vec![];
                 writer.stream(&mut buf, |writer| write_string(writer, value))?;
@@ -2233,7 +2308,8 @@ impl Property {
                 writer.write_all(&buf)?;
                 size
             }
-            Property::Object { id, value } => {
+            Property::Object { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 let mut buf = vec![];
                 writer.stream(&mut buf, |writer| write_string(writer, value))?;
@@ -2241,7 +2317,8 @@ impl Property {
                 writer.write_all(&buf)?;
                 size
             }
-            Property::Text { id, value } => {
+            Property::Text { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 let mut buf = vec![];
                 writer.stream(&mut buf, |writer| value.write(writer))?;
@@ -2249,7 +2326,8 @@ impl Property {
                 writer.write_all(&buf)?;
                 size
             }
-            Property::Delegate { id, value } => {
+            Property::Delegate { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 let mut buf = vec![];
                 writer.stream(&mut buf, |writer| value.write(writer))?;
@@ -2257,7 +2335,8 @@ impl Property {
                 writer.write_all(&buf)?;
                 size
             }
-            Property::MulticastDelegate { id, value } => {
+            Property::MulticastDelegate { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 let mut buf = vec![];
                 writer.stream(&mut buf, |writer| value.write(writer))?;
@@ -2265,7 +2344,8 @@ impl Property {
                 writer.write_all(&buf)?;
                 size
             }
-            Property::MulticastInlineDelegate { id, value } => {
+            Property::MulticastInlineDelegate { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 let mut buf = vec![];
                 writer.stream(&mut buf, |writer| value.write(writer))?;
@@ -2273,7 +2353,8 @@ impl Property {
                 writer.write_all(&buf)?;
                 size
             }
-            Property::MulticastSparseDelegate { id, value } => {
+            Property::MulticastSparseDelegate { index, id, value } => {
+                writer.write_u32::<LE>(*index)?;
                 write_optional_uuid(writer, *id)?;
                 let mut buf = vec![];
                 writer.stream(&mut buf, |writer| value.write(writer))?;
@@ -2282,10 +2363,12 @@ impl Property {
                 size
             }
             Property::Set {
+                index,
                 id,
                 set_type,
                 value,
             } => {
+                writer.write_u32::<LE>(*index)?;
                 set_type.write(writer)?;
                 write_optional_uuid(writer, *id)?;
                 let mut buf = vec![];
@@ -2296,11 +2379,13 @@ impl Property {
                 size
             }
             Property::Map {
+                index,
                 key_type,
                 value_type,
                 id,
                 value,
             } => {
+                writer.write_u32::<LE>(*index)?;
                 key_type.write(writer)?;
                 value_type.write(writer)?;
                 write_optional_uuid(writer, *id)?;
@@ -2315,11 +2400,13 @@ impl Property {
                 size
             }
             Property::Struct {
+                index,
                 struct_type,
                 struct_id,
                 id,
                 value,
             } => {
+                writer.write_u32::<LE>(*index)?;
                 struct_type.write(writer)?;
                 struct_id.write(writer)?;
                 write_optional_uuid(writer, *id)?;
@@ -2330,10 +2417,12 @@ impl Property {
                 size
             }
             Property::Array {
+                index,
                 array_type,
                 id,
                 value,
             } => {
+                writer.write_u32::<LE>(*index)?;
                 array_type.write(writer)?;
                 write_optional_uuid(writer, *id)?;
                 let mut buf = vec![];
@@ -2663,7 +2752,7 @@ mod tests {
         ];
         let mut reader = Cursor::new(&original);
         let obj = Context::run(&mut reader, |reader| {
-            Property::read(reader, PropertyType::IntProperty, 0)
+            Property::read(reader, PropertyType::IntProperty, 0, 0)
         })?;
         let mut reconstructed: Vec<u8> = vec![];
         Context::run(&mut reconstructed, |writer| obj.write(writer))?;
@@ -2672,6 +2761,7 @@ mod tests {
             obj,
             Property::Int {
                 id: Some(uuid::uuid!("00000000000000000000000000000000")),
+                index: 0,
                 value: 10
             }
         );
@@ -2688,7 +2778,7 @@ mod tests {
         ];
         let mut reader = Cursor::new(&original);
         let obj = Context::run(&mut reader, |reader| {
-            Property::read(reader, PropertyType::StrProperty, 0)
+            Property::read(reader, PropertyType::StrProperty, 0, 0)
         })?;
         println!("{obj:#?}");
         let mut reconstructed: Vec<u8> = vec![];
@@ -2710,7 +2800,7 @@ mod tests {
             Context::run(&mut reader, read_property)?,
             Some((
                 "VersionNumber".to_string(),
-                Property::Int { id: None, value: 2 }
+                Property::Int { index: 0, id: None, value: 2 }
             ))
         );
         Ok(())
@@ -2743,11 +2833,13 @@ mod tests {
             Some((
                 "VanityMasterySave".to_string(),
                 Property::Struct {
+                    index: 0,
                     id: None,
-                    value: StructValue::Struct(indexmap::IndexMap::from([
+                    value: StructValue::Struct(Vec::from([
                         (
                             "Level".to_string(),
                             Property::Int {
+                                index: 0,
                                 id: None,
                                 value: 140,
                             }
@@ -2755,6 +2847,7 @@ mod tests {
                         (
                             "XP".to_string(),
                             Property::Int {
+                                index: 0,
                                 id: None,
                                 value: 9018,
                             },
@@ -2762,6 +2855,7 @@ mod tests {
                         (
                             "HasAwardedForOldPurchases".to_string(),
                             Property::Bool {
+                                index: 0,
                                 id: None,
                                 value: true,
                             },
@@ -2790,6 +2884,7 @@ mod tests {
             Some((
                 "StatIndices".to_string(),
                 Property::Array {
+                    index: 0,
                     array_type: PropertyType::IntProperty,
                     id: None,
                     value: ValueArray::Base(ValueVec::Int(vec![0]))
@@ -2806,7 +2901,7 @@ mod tests {
             println!("{property:#?}");
             let mut reconstructed: Vec<u8> = vec![];
             Context::run(&mut reconstructed, |writer| {
-                write_property((&property.0, &property.1), writer)
+                write_property(&(property.0, property.1), writer)
             })?;
             assert_eq!(original, &reconstructed[..]);
             Ok(())
